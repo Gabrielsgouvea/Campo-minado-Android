@@ -1,0 +1,391 @@
+﻿Build1=Default,b4a.example
+File1=bomba achada.jpg
+File2=bomba falsa.jpg
+File3=bomba.jpg
+File4=campmin.jpg
+File5=campo_minado.bal
+File6=fundo.jpg
+FileGroup1=Default Group
+FileGroup2=Default Group
+FileGroup3=Default Group
+FileGroup4=Default Group
+FileGroup5=Default Group
+FileGroup6=Default Group
+Group=Default Group
+Library1=core
+Library2=xui
+ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: https://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~CreateResourceFromFile(Macro, Themes.LightTheme)~\n~'End of default text.~\n~
+NumberOfFiles=6
+NumberOfLibraries=2
+NumberOfModules=0
+Version=13.4
+@EndOfDesignText@
+#Region Project Attributes
+    #ApplicationLabel: Gerador de senha
+    #VersionCode: 1
+    #VersionName: 1
+    #SupportedOrientations: portrait
+    #CanInstallToExternalStorage: False
+#End Region
+
+#Region Activity Attributes
+    #FullScreen: False
+    #IncludeTitle: False
+#End Region
+
+Sub Process_Globals
+	Private xui As XUI
+	Private tmrToque As Timer 'Usado para distinguir entre toque único (timeout) e duplo toque rápido
+	Private tmrJogo As Timer
+End Sub
+
+Sub Globals
+	Private bt_action, bt_ini As Button
+	Private fundos(81), img_bomb, img_explod, img_flag, img_nobomb, img_vazio As ImageView
+	Private btns(81) As Button
+	Private lbls(81), lbl_bandeira, lbl_time, lbl_info As Label
+	Private tipos(81) As Int
+	Private bombardasMarcadas, celula, idxPendente, segundos, totalBandeiras As Int
+	Private jogoIniciado, jogoPausado, visivel As Boolean
+	Private viewsDinamicas As List
+	Private pad As Int ' Definido globalmente para evitar cálculos repetidos
+End Sub
+
+Sub Activity_Create(FirstTime As Boolean)
+	Activity.LoadLayout("campo_minado")
+    
+	' Inicialização de imagens (visibilidade)
+	img_bomb.Visible = False
+	img_vazio.Visible = False
+	img_nobomb.Visible = False
+	img_explod.Visible = False
+	img_flag.Visible = False
+	visivel = False
+	
+	' Inicialização de timers
+	tmrToque.Initialize("tmrToque", 350)
+	tmrToque.Enabled = False
+	tmrJogo.Initialize("tmrJogo", 1000)
+	tmrJogo.Enabled = False
+    
+	' Cálculo de dimensões e padding (calculado apenas uma vez)
+	celula = Activity.Width / 9
+	pad = celula * 0.1
+    
+	viewsDinamicas.Initialize
+    
+	ResetarEstado ' Centraliza a limpeza de variáveis e views dinâmicas
+	CriarGrade 'Fundo (ImageView)| Label (Número de vizinhos) | ' Botão (Interação)
+    
+	' Configuração visual inicial
+	bt_ini.Text = "Iniciar"
+	lbl_time.Left = Activity.Width - lbl_time.Width
+	lbl_time.Top = 5dip
+	lbl_bandeira.Left = 5dip
+	lbl_bandeira.Top = 5dip
+	bt_ini.Left = (Activity.Width / 2) - (bt_ini.Width / 2)
+	bt_ini.Top = btns(80).top + btns(80).Height  + 80
+	bt_action.top = bt_ini.Top  + 50
+	bt_action.Left = (bt_ini.Left + bt_ini.Width) / 2
+	
+	'info
+	lbl_info.Left = btns(0).Left
+	lbl_info.Top = btns (0).top
+	lbl_info.Width  = btns(8).Left + btns(8).Width - btns(0).Left
+	lbl_info.Height = btns(80).Top + btns(80).Height - btns(0).Top + 100
+End Sub
+
+Sub bt_ini_Click
+	lbl_info.Visible = False
+	If bt_ini.Text = "Iniciar" Or bt_ini.Text = "Jogar novamente" Then
+		IniciarJogo
+	Else If bt_ini.Text = "Pausar" Then
+		AlternarPausa(True)
+	Else If bt_ini.Text = "Continuar" Then
+		AlternarPausa(False)
+	End If
+End Sub
+
+' Função centralizada para pausar/continuar o jogo
+Sub AlternarPausa(Pausar As Boolean)
+	jogoPausado = Pausar
+	tmrJogo.Enabled = Not(Pausar)
+	tmrToque.Enabled = False
+	If Pausar Then bt_ini.Text = "Continuar" Else bt_ini.Text = "Pausar"
+End Sub
+
+' Centraliza a limpeza de variáveis e views dinâmicas
+Sub ResetarEstado
+	segundos = 0
+	lbl_time.Text = "00:00"
+	jogoIniciado = False
+	jogoPausado = False
+	bombardasMarcadas = 0
+	totalBandeiras = 0
+	lbl_bandeira.Text = "0"
+    
+	For Each v As View In viewsDinamicas
+		v.RemoveView
+	Next
+	viewsDinamicas.Clear
+    
+	For n = 0 To 80
+		tipos(n) = 0
+	Next
+End Sub
+
+Sub IniciarJogo
+	ResetarEstado
+	SortearBombas
+    
+	Dim idx As Int
+	For idx = 0 To 80
+		btns(idx).Visible = True
+		btns(idx).Enabled = True
+        
+		' Atualiza o visual da célula (fundo e label) usando função reutilizável
+		AtualizarVisualCelula(idx, ContarVizinhos(GetRow(idx), GetCol(idx)))
+	Next
+    
+	tmrJogo.Enabled = True
+	bt_ini.Text = "Pausar"
+End Sub
+
+' Única fonte de verdade para o sorteio de bombas
+Sub SortearBombas
+	Dim n As Int
+	Dim sorteados As Int = 0
+	Do While sorteados < 10
+		n = Rnd(0, 81)
+		If tipos(n) = 0 Then
+			tipos(n) = 1
+			sorteados = sorteados + 1
+		End If
+	Loop
+End Sub
+
+Sub tmrJogo_Tick
+	segundos = segundos + 1
+	lbl_time.Text = FormatarTempo(segundos)
+End Sub
+
+' Função reutilizável para formatar o tempo MM:SS
+Sub FormatarTempo(totalSegundos As Int) As String
+	Dim mins As Int = totalSegundos / 60
+	Dim seg As Int = totalSegundos Mod 60
+	Return NumberFormat(mins, 2, 0) & ":" & NumberFormat(seg, 2, 0)
+End Sub
+
+Sub ContarVizinhos(lin As Int, col As Int) As Int
+	Dim count As Int = 0
+	Dim vlin, vcol, vidx As Int
+	For vlin = lin - 1 To lin + 1
+		For vcol = col - 1 To col + 1
+			If vlin >= 0 And vlin <= 8 And vcol >= 0 And vcol <= 8 Then
+				If Not(vlin = lin And vcol = col) Then
+					vidx = GetIndex(vlin, vcol)
+					If tipos(vidx) = 1 Then count = count + 1
+				End If
+			End If
+		Next
+	Next
+	Return count
+End Sub
+
+' Funções auxiliares para manipulação de coordenadas
+Sub GetIndex(lin As Int, col As Int) As Int
+	Return lin * 9 + col
+End Sub
+
+Sub GetRow(idx As Int) As Int
+	Return idx / 9
+End Sub
+
+Sub GetCol(idx As Int) As Int
+	Return idx Mod 9
+End Sub
+
+' Extração da lógica visual para evitar repetição em IniciarJogo e CriarGrade
+Sub AtualizarVisualCelula(idx As Int, count As Int)
+	If tipos(idx) = 1 Then
+		fundos(idx).Bitmap = img_bomb.Bitmap
+	Else
+		fundos(idx).Bitmap = img_vazio.Bitmap
+	End If
+    
+	If tipos(idx) = 0 And count > 0 Then
+		lbls(idx).Text = count
+		Select count
+			Case 1: lbls(idx).TextColor = Colors.Blue
+			Case 2: lbls(idx).TextColor = Colors.Green
+			Case 3: lbls(idx).TextColor = Colors.Red
+			Case 4: lbls(idx).TextColor = Colors.RGB(114, 47, 55) 'Vinho
+			Case 5: lbls(idx).TextColor = Colors.RGB(88, 41, 65) 'Roxo
+			Case Else: lbls(idx).TextColor = Colors.Black
+		End Select
+	Else
+		lbls(idx).Text = ""
+	End If
+End Sub
+
+Sub CriarGrade 'Fundo (ImageView)| Label (Número de vizinhos) | ' Botão (Interação)
+	Dim col, lin, idx As Int
+	Dim topoOffset As Int = celula
+	
+	idx = 0
+	For lin = 0 To 8
+		For col = 0 To 8
+			' Fundo (ImageView)
+			Dim iv As ImageView
+			iv.Initialize("fundo_ev")
+			Activity.AddView(iv, col * celula + pad, topoOffset + lin * celula + pad, celula - pad * 2, celula - pad * 2)
+			fundos(idx) = iv
+            
+			' Label (Número de vizinhos)
+			Dim lbl As Label
+			lbl.Initialize("")
+			lbl.TextSize = 16
+			lbl.Typeface = Typeface.DEFAULT_BOLD
+			lbl.Gravity = Gravity.CENTER
+			Activity.AddView(lbl, col * celula + pad, topoOffset + lin * celula + pad, celula - pad * 2, celula - pad * 2)
+			lbls(idx) = lbl
+            
+			' Botão (Interação)
+			Dim btn As Button
+			btn.Initialize("bt_action")
+			btn.Tag = idx
+			btns(idx) = btn
+			Activity.AddView(btn, col * celula, topoOffset + lin * celula, celula, celula)
+			btns(idx).Visible = visivel 'teste
+			idx = idx + 1
+		Next
+	Next
+	visivel = True
+End Sub
+
+Sub bt_action_Click
+	Dim btn As Button = Sender
+	Dim idx As Int = btn.Tag
+    
+	If tmrToque.Enabled And idx = idxPendente Then
+		tmrToque.Enabled = False
+		If tipos(idx) = 1 Then GameOver(btn) Else Revelar(idx)
+	Else
+		idxPendente = idx
+		tmrToque.Enabled = True
+	End If
+End Sub
+
+Sub tmrToque_Tick
+	tmrToque.Enabled = False
+	If totalBandeiras >= 10 Then Return
+    
+	Dim btn As Button = btns(idxPendente)
+	btn.Visible = False
+    
+	Dim flag As ImageView
+	flag.Initialize("flag_ev")
+	flag.Bitmap = img_flag.Bitmap
+	flag.Tag = btn
+	Activity.AddView(flag, btn.Left + pad, btn.Top + pad, celula - pad * 2, celula - pad * 2)
+	viewsDinamicas.Add(flag)
+    
+	totalBandeiras = totalBandeiras + 1
+	lbl_bandeira.Text = totalBandeiras
+    
+	If tipos(idxPendente) = 1 Then
+		bombardasMarcadas = bombardasMarcadas + 1
+		If bombardasMarcadas = 10 Then Vitoria
+	End If
+End Sub
+
+Sub Vitoria
+	FinalizarPartida("Jogar novamente")
+End Sub
+
+Sub GameOver(btnClicado As Button)
+	btnClicado.Visible = False
+	Dim explod As ImageView
+	explod.Initialize("")
+	explod.Bitmap = img_explod.Bitmap
+	Activity.AddView(explod, btnClicado.Left + pad, btnClicado.Top + pad, celula - pad * 2, celula - pad * 2)
+	viewsDinamicas.Add(explod)
+    
+	' Revela as outras bombas
+	For n = 0 To 80
+		If tipos(n) = 1 And btns(n).Visible = True Then btns(n).Visible = False
+	Next
+	FinalizarPartida("Jogar novamente")
+End Sub
+
+' Função centralizada para encerrar a partida (Vitória ou Derrota)
+Sub FinalizarPartida(TextoBotao As String)
+	tmrJogo.Enabled = False
+	tmrToque.Enabled = False
+	jogoIniciado = False
+	For n = 0 To 80
+		btns(n).Enabled = False
+	Next
+	bt_ini.Text = TextoBotao
+End Sub
+
+Sub Revelar(idx As Int)
+	Dim fila As List
+	Dim visitados(81) As Boolean
+	Dim atual, lin, col, vlin, vcol, vidx As Int
+    
+	fila.Initialize
+	fila.Add(idx)
+	visitados(idx) = True
+    
+	Do While fila.Size > 0
+		atual = fila.Get(0)
+		fila.RemoveAt(0)
+		btns(atual).Visible = False
+        
+		lin = GetRow(atual)
+		col = GetCol(atual)
+        
+		If tipos(atual) = 0 And ContarVizinhos(lin, col) = 0 Then
+			For vlin = lin - 1 To lin + 1
+				For vcol = col - 1 To col + 1
+					If vlin >= 0 And vlin <= 8 And vcol >= 0 And vcol <= 8 Then
+						vidx = GetIndex(vlin, vcol)
+						If Not(visitados(vidx)) And tipos(vidx) = 0 Then
+							visitados(vidx) = True
+							fila.Add(vidx)
+						End If
+					End If
+				Next
+			Next
+		End If
+	Loop
+End Sub
+
+Sub flag_ev_Click
+	Dim iv As ImageView = Sender
+	Dim btn As Button = iv.Tag
+	Dim idx As Int = btn.Tag
+    
+	If tipos(idx) = 1 Then bombardasMarcadas = bombardasMarcadas - 1
+	totalBandeiras = totalBandeiras - 1
+	lbl_bandeira.Text = totalBandeiras
+    
+	Dim nobomb As ImageView
+	nobomb.Initialize("nobomb_ev")
+	nobomb.Bitmap = img_nobomb.Bitmap
+	nobomb.Tag = iv.Tag
+	Activity.AddView(nobomb, iv.Left, iv.Top, celula - pad * 2, celula - pad * 2)
+	viewsDinamicas.Add(nobomb)
+    
+	viewsDinamicas.RemoveAt(viewsDinamicas.IndexOf(iv))
+	iv.RemoveView
+End Sub
+
+Sub nobomb_ev_Click
+	Dim iv As ImageView = Sender
+	Dim btn As Button = iv.Tag
+	btn.Visible = True
+	viewsDinamicas.RemoveAt(viewsDinamicas.IndexOf(iv))
+	iv.RemoveView
+End Sub
