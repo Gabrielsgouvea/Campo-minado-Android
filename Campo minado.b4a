@@ -85,7 +85,7 @@ Sub Activity_Create(FirstTime As Boolean)
 	lbl_bandeira.Top = 5dip
 	bt_ini.Left = (Activity.Width / 2) - (bt_ini.Width / 2)
 	bt_ini.Top = btns(80).top + btns(80).Height  + 80
-	bt_action.top = bt_ini.Top  + 50
+	bt_action.top = bt_ini.Top  + 30
 	bt_action.Left = (bt_ini.Left + bt_ini.Width) / 2
 	
 	'info

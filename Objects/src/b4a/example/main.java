@@ -416,8 +416,8 @@ mostCurrent._lbl_bandeira.setTop(anywheresoftware.b4a.keywords.Common.DipToCurre
 mostCurrent._bt_ini.setLeft((int) ((mostCurrent._activity.getWidth()/(double)2)-(mostCurrent._bt_ini.getWidth()/(double)2)));
  //BA.debugLineNum = 65;BA.debugLine="bt_ini.Top = btns(80).top + btns(80).Height  + 80";
 mostCurrent._bt_ini.setTop((int) (mostCurrent._btns[(int) (80)].getTop()+mostCurrent._btns[(int) (80)].getHeight()+80));
- //BA.debugLineNum = 66;BA.debugLine="bt_action.top = bt_ini.Top  + 50";
-mostCurrent._bt_action.setTop((int) (mostCurrent._bt_ini.getTop()+50));
+ //BA.debugLineNum = 66;BA.debugLine="bt_action.top = bt_ini.Top  + 30";
+mostCurrent._bt_action.setTop((int) (mostCurrent._bt_ini.getTop()+30));
  //BA.debugLineNum = 67;BA.debugLine="bt_action.Left = (bt_ini.Left + bt_ini.Width) / 2";
 mostCurrent._bt_action.setLeft((int) ((mostCurrent._bt_ini.getLeft()+mostCurrent._bt_ini.getWidth())/(double)2));
  //BA.debugLineNum = 70;BA.debugLine="lbl_info.Left = btns(0).Left";
